@@ -1,0 +1,24 @@
+const N1 = 2
+const N2 = 8
+const M1 = 1 
+const M2 = 9
+const C = 10
+const W = 2
+const U1 = 1
+const U2 = 1
+const PUMPQ = 1
+
+range Q = 0..C
+range P = 0..PUMPQ
+range V = 0..W
+
+
+TIMER = (start -> TIMER[INTERVAL]),
+TIMER[i:0..INTERVAL] = (when(i>0) tick -> TIMER[i-1] | when(i==0)  beep -> TIMER[INTERVAL] | stop -> STOP).
+
+WATERSENSOR[q:Q] = (start -> SYS),readWaterQuantity[q] -> waterchan.send[q] -> WATERSENSOR[q].
+
+SYSCONTROL = (start -> SYS),
+SYS = (beep -> waterchan.receive[q:Q] -> SYS | stop -> STOP).
+
+||ALLSYSTEM = (TIMER || STEAMBOILER || SYSCONTROL)/{waterchan/waterchan.{send,receive}}.

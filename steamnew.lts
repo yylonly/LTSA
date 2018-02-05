@@ -1,0 +1,219 @@
+const PUMPNUM = 5
+const INTERVAL = 5
+const T = INTERVAL + 1
+const ON = 2
+const OFF = 0
+const KEEP = 1
+const TRUE = 1
+const FALSE = 0
+
+range BROKEN = FALSE..TRUE
+range PUMPORDER = OFF..ON 
+
+const N1 = 30
+const N2 = 70
+const M1 = 10
+const M2 = 90
+
+const BEST1 = 40
+const BEST2 = 60
+
+const C = 100
+const W = 9
+const DOWN = 2
+const UP = 2
+
+const MID = (N1+N2)/2
+const FTRU  = 3 
+const FTRD = 3
+const VMINOUT = 1
+const PUMPONE=3
+const PN = 5
+const PQ = 2
+const PUMPQ = PN*PQ
+const INITQ = 50
+
+
+range Q = 0..C
+range P = 0..PUMPQ
+range V = 0..W
+range INDEX = 0..INTERVAL-1
+
+
+//BOILER Model  
+STEAMBOILER = (init->STEAMBOILERUN[INITQ][W][PUMPQ][OFF]),
+	STEAMBOILERUN[q:Q][v:V][p:P][pc:PUMPORDER] = ( getWaterQuantity[q] -> getSteamRate[v] -> getPumpRate[p] -> 
+		  
+		  ( when (pc == ON)
+ 				pumpOn ->  STEAMBOILERLOOP[q][v][p+PQ][INTERVAL-1][ON]
+		  | when (pc == ON)
+     		    pumpOff -> STEAMBOILERLOOP[q][v][p][INTERVAL-1][OFF]
+		  | when (pc == ON)
+				keep -> aa -> STEAMBOILERLOOP[q][v][p+PQ][INTERVAL-1][OFF]
+		  | when (pc == OFF)
+      			pumpOn ->  STEAMBOILERLOOP[q][v][p][INTERVAL-1][ON]
+		  | when (pc == OFF)
+			    pumpOff -> STEAMBOILERLOOP[q][v][p-PQ][INTERVAL-1][OFF]
+		  | when (pc == OFF)
+		  		keep -> STEAMBOILERLOOP[q][v][p][INTERVAL-1][OFF]
+		  )),
+
+STEAMBOILERLOOP[q:Q][v:V][p:P][i:INDEX][pc:PUMPORDER] = (
+            when (i == 0)
+			 boilingout[q][v][p] -> STEAMBOILERUN[q][v][p][pc]
+          | when (i > 0)
+             boiling[q][v][p] ->
+
+ 	      		( when (q >= M2 )
+    	  		   boilingAboveM2[q][v][p] -> STEAMBOILERLOOP[q+(p-v)][VMINOUT][p][i-1][pc]
+
+      		    | when (N2 <= q && q < M2)
+    			     boilingN2toM2[q][v][p] -> STEAMBOILERLOOP[q+(p-v)][VMINOUT][p][i-1][pc]
+
+ 	 		    | when (BEST2 < q && q < N2 && (p-v) < 0 && (v+UP) < W)
+    			     boilingBEST2toN21[q][v][p] -> STEAMBOILERLOOP[q+(p-v)][v+UP][p][i-1][pc]
+
+		    	| when (BEST2 < q && q < N2 && (p-v) == 0 && v == 0)
+    			     boilingBEST2toN23[q][v][p] -> STEAMBOILERLOOP[q+(p-v)][v+UP][p][i-1][pc]
+
+ 	 		    | when (BEST2 < q && q < N2 && (p-v) < 0 && (v+UP) >= W)
+    			     boilingBEST2toN22[q][v][p] -> STEAMBOILERLOOP[q+(p-v)][v][p][i-1][pc]
+
+     		    | when (BEST2 < q && q < N2 && (p-v) > 0 && v > VMINOUT)
+    			     boilingBEST2toN23[q][v][p] -> STEAMBOILERLOOP[q+(p-v)][v-DOWN][p][i-1][pc]
+
+     		    | when (BEST2 < q && q < N2 && (p-v) > 0 && v <= VMINOUT)
+    			     boilingBEST2toN23[q][v][p] -> STEAMBOILERLOOP[q+(p-v)][v][p][i-1][pc]
+
+ 				| when (BEST1 <= q && q <= BEST2)
+    			     boilingBEST1toBEST2[q][v][p] -> STEAMBOILERLOOP[q+(p-v)][W][p][i-1][pc]
+
+       		    | when (N1 <= q && q < BEST1 && (p-v) < 0)
+    			     boilingN1toBEST1[q][v][p] -> STEAMBOILERLOOP[q+(p-v)][v-DOWN][p][i-1][pc]
+
+        	    | when (N1 <= q && q < BEST1 && (p-v) >= 0 && (v+UP) < W)
+    	     		 boilingN1toBEST1[q][v][p] -> STEAMBOILERLOOP[q+(p-v)][v+UP][p][i-1][pc]
+
+          		| when (N1 <= q && q < BEST1 && (p-v) >= 0 && (v+UP) >= W)
+    	     		boilingN1toBEST1[q][v][p] -> STEAMBOILERLOOP[q+(p-v)][v][p][i-1][pc]
+
+          		| when (M1 <= q && q < N1)
+    	     		boilingM1toN1[q][v][p] -> STEAMBOILERLOOP[q+(p-v)][VMINOUT][p][i-1][pc]
+
+          		| when (q < M1)
+    	     		boilingLM1[q][v][p] -> STEAMBOILERLOOP[q+(p-v)][0][p][i-1][pc]
+          		)
+).
+
+
+//Sensors
+WATERSENSOR = ( tick5s -> getWaterQuantity[q:Q] -> waterchan.send[q] -> WATERSENSOR).
+
+STEAMSENSOR = ( tick5s -> getSteamRate[v:V] -> steamchan.send[v] -> STEAMSENSOR).
+
+PUMPSENSOR = ( tick5s -> getPumpRate[p:P] -> pumpsensorchan.send[p] -> PUMPSENSOR).
+
+//Pump Controler
+PUMPCONTROLER = (pumpcontrollerchan.receive[o:PUMPORDER] -> (when (o == ON)  delay5s -> pumpOn -> PUMPCONTROLER | when (o == OFF) pumpOff -> PUMPCONTROLER | when (o == KEEP) keep -> PUMPCONTROLER)).
+ 
+//Control System - need modified to multi pump on/off 
+CONTROLSYSTEM = (init -> SYSCONTROLRUN[OFF]),
+
+	SYSCONTROLRUN[po:PUMPORDER] = (waterchan.receive[q:Q] -> steamchan.receive[v:V] -> pumpsensorchan.receive[p:P]  -> makedecision ->
+
+   		   //---------------------- q < BEST1+FTRD -------------------------
+		   (when (q < BEST1+FTRD && p <= (PUMPQ-2*PQ))  
+				makedecisionon -> pumpcontrollerchan.send[ON] -> SYSCONTROLRUN[ON] |
+
+			when (q < BEST1+FTRD && p == PUMPQ-PQ && po == OFF)  
+				makedecisionon -> pumpcontrollerchan.send[ON] -> SYSCONTROLRUN[ON] |
+
+			when (q < BEST1+FTRD && p <= PUMPQ-PQ && po == ON)  
+				makedecisionnone -> pumpcontrollerchan.send[KEEP] -> SYSCONTROLRUN[KEEP] |
+
+			when (q < BEST1+FTRD && p == PUMPQ-PQ && po == KEEP)  
+				makedecisionon -> pumpcontrollerchan.send[ON] -> SYSCONTROLRUN[ON] |
+
+			when (q < BEST1+FTRD && p == PUMPQ)  
+				makedecisionnone -> pumpcontrollerchan.send[KEEP] -> SYSCONTROLRUN[KEEP] |
+
+			//--------------------- q > BEST2-FTRU --------------------------
+
+			when (q > BEST2-FTRU && (p-v) >= 0 && p > 0) 
+				makedecisionoff -> pumpcontrollerchan.send[OFF] -> SYSCONTROLRUN[OFF] | 
+
+            when (q > BEST2-FTRU && v >= 0 && p == 0) 
+				makedecisionnone -> pumpcontrollerchan.send[KEEP] -> SYSCONTROLRUN[KEEP] |
+
+			//----------------BEST1+FTRD <= q && q <= BEST2-FTRU--------------
+
+	        when (BEST1+FTRD <= q && q <= BEST2-FTRU) 
+				makedecisionnone -> pumpcontrollerchan.send[KEEP] -> SYSCONTROLRUN[KEEP] 
+		   )).
+
+//Control System - need modified to multi pump on/off 
+CONTROLSYSTEMWITHRESCUE = (init -> SYSCONTROLRUN[0]),
+
+	SYSCONTROLRUN[lastq:Q] = ( rescue ->  SYSCONTROLRESCUE[lastq] | waterchan.receive[q:Q] -> steamchan.receive[v:V] -> pumpsensorchan.receive[p:P]  -> makedecision ->
+
+           (when (q > BEST2-FTR && (p-v) >= 0 && p > 0) 
+				makedecisionoff -> pumpcontrollerchan.send[OFF] -> SYSCONTROLRUN[q] | 
+
+            when (q > BEST2-FTR && v > 0 && p == 0) 
+				nodecisionresult -> pumpcontrollerchan.send[KEEP] -> SYSCONTROLRUN[q] |
+
+	        when (BEST1+FTR <= q && q <= BEST2-FTR) 
+				nodecisionresult -> pumpcontrollerchan.send[KEEP] -> SYSCONTROLRUN[q] |
+
+         	when (q < BEST1+FTR && (p-v) <= 0 && p < PUMPQ)  
+				makedecisionon -> pumpcontrollerchan.send[ON] -> SYSCONTROLRUN[q] 
+		   )),
+
+    SYSCONTROLRESCUE[lastq:Q] = ( repaired -> SYSCONTROLRUN[0] | waterchan.receive[q:Q] -> steamchan.receive[v:V] -> pumpsensorchan.receive[p:P] -> makerescuedecision -> 
+				
+ 	    	(when (lastq+(p-v)*5 >= M1 && lastq+(p-v)*5 <= M2 && v == p)
+       			nodecisionresult -> pumpcontrollerchan.send[KEEP] -> SYSCONTROLRESCUE[lastq+(p-v)*5+(p-v)] |
+
+             when (lastq+(p-v)*5 > BEST2-FTR && (p-v) >= 0 && p > 0) 
+				makedecisionoff -> pumpcontrollerchan.send[OFF] -> SYSCONTROLRESCUE[lastq+(p-v)*5+(p-v)] | 
+
+	         when (BEST1+FTR <= (lastq+(p-v)*5) && (lastq+(p-v)*5) <= BEST2-FTR) 
+				nodecisionresult -> pumpcontrollerchan.send[KEEP] -> SYSCONTROLRESCUE[lastq+(p-v)*5+(p-v)] |
+
+         	 when (lastq+(p-v)*5 < BEST1+FTR && (p-v) <= 0 && p < PUMPQ)  
+				makedecisionon -> pumpcontrollerchan.send[ON] -> SYSCONTROLRESCUE[lastq+(p-v)*5+(p-v)] 
+             )).
+
+
+
+//Composite System
+||ALLSYSTEMRESCUE = (STEAMBOILER || CONTROLSYSTEMWITHRESCUE || PUMPCONTROLER || WATERSENSOR || STEAMSENSOR || PUMPSENSOR )
+         /{waterchan/waterchan.{send,receive}, pumpsensorchan/pumpsensorchan.{send,receive}, steamchan/steamchan.{send,receive}, pumpcontrollerchan/pumpcontrollerchan.{send,receive}}.
+
+||ALLSYSTEM = (STEAMBOILER || CONTROLSYSTEM || PUMPCONTROLER || WATERSENSOR || STEAMSENSOR || PUMPSENSOR )
+         /{waterchan/waterchan.{send,receive}, pumpsensorchan/pumpsensorchan.{send,receive}, steamchan/steamchan.{send,receive}, pumpcontrollerchan/pumpcontrollerchan.{send,receive}}.
+
+
+||BASICSYSTEM = (ALLSYSTEM || BASIC).
+||NORMALSYSTEM = (ALLSYSTEM || NORMAL).
+||OPTIMIZATIONSYSTEM = (ALLSYSTEM || OPTIMIZATION).
+
+//Progress
+progress STEAMBOILERWorking = {boiling[q:Q][v:V][p:P], boilingout[q:Q][v:V][p:P]}
+progress CSWorking = {makedecision, makerescuedecision, rescue, repaired}
+progress WaterSensorWorking = {getWaterQuantity[q:Q]}
+progress SteamSensorWorking = {getSteamRate[v:V]}
+progress PumpSensorWorking = {getPumpRate[v:V]}
+progress PumpControllerWorking = {pumpOn, pumpOff, keep}
+
+
+//Proerties
+property OPTIMIZATION = (getWaterQuantity[q:BEST1..BEST2] -> OPTIMIZATION) + {getWaterQuantity[0..BEST1-1], getWaterQuantity[BEST2+1..C]}.
+property BASIC = (getWaterQuantity[q:M1..M2] -> BASIC) + {getWaterQuantity[0..M1-1], getWaterQuantity[M2+1..C]}.
+property NORMAL = (getWaterQuantity[q:N1..N2] -> NORMAL) + {getWaterQuantity[0..N1-1], getWaterQuantity[N2+1..C]}.
+
+
+
+
+
+
