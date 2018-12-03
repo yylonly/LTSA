@@ -89,7 +89,7 @@ STEAMBOILER = (start->STEAMBOILERUN[QINIT][0][0][0]),
 		  when (t % 2 == 0)						// move one bit right
 			pumping -> STEAMBOILERUN[q][v][p][t/2]					
 		| when (t % 2 != 0)						// the rightmost one is 1, representing pump increase
-			pumping -> STEAMBOILERUN[q][v][p][(t-1)/2]
+			pumping -> STEAMBOILERUN[q][v][p+PQ][(t-1)/2]
 		).
 
 
